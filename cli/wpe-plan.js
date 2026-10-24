@@ -87,6 +87,7 @@ if (!inserts.length) {
   process.exit(2);
 }
 
+const rotatedInserts = inserts.filter((it) => Math.abs(((it.rotation || 0) % 360)) > 1).length;
 const mapped = WPE.Mapper.toCounts(inserts);
 if (mapped.counts.robots === 0) {
   console.error('no robot blocks recognised — check the block naming');
@@ -129,6 +130,8 @@ const summary = {
   units: units,
   found: mapped.found,
   unknown: mapped.unknown.map((b) => b.name),
+  rotatedInserts: rotatedInserts,
+  notes: result.notes || [],
   jph: jph,
   status: result.status,
   rules: result.check.passCount + '/' + result.check.rules.length,
@@ -148,10 +151,13 @@ if (asJson) {
   console.log('  hall        : ' + (hallW / 1000).toFixed(1) + ' x ' + (hallH / 1000).toFixed(1) + ' m');
   console.log('  found       : ' + JSON.stringify(mapped.found));
   if (mapped.unknown.length) console.log('  unknown     : ' + mapped.unknown.map((b) => b.name).join(', '));
+  if (rotatedInserts) console.log('  note        : ' + rotatedInserts + ' block(s) rotated in the drawing; ' +
+    'footprints come from the catalogue, not the drawing');
   console.log('  status      : ' + result.status + '   rules ' + summary.rules);
   console.log('  flow        : ' + summary.flow_m + ' m, ' + m.rows + ' row(s), ' +
     summary.footprint_m2 + ' m2 footprint');
   console.log('  candidates  : ' + summary.alternatives + ' in ' + ms + ' ms');
+  (result.notes || []).forEach((n) => console.log('  note        : ' + n));
   if (summary.dxf) console.log('  wrote       : ' + summary.dxf);
   if (summary.csv) console.log('  wrote       : ' + summary.csv);
   const meta = {};

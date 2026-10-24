@@ -41,6 +41,23 @@ WPE plan — hall-24x13-with-machines.dxf
   candidates  : 34 in 142 ms
 ```
 
+## Fixture suite — five drawings the plugin will meet
+
+`npm test` runs both suites. Each fixture is a stand-in for a real drawing, and the assertion is about behaviour, not
+just "it ran":
+
+| Fixture | What it proves |
+|---|---|
+| `hall-24x13-with-machines` | The baseline: 3 robots, both machines, plans and passes 8/8 |
+| `varied-machine-sizes` | A 4.2 × 2.6 m and a 1.8 × 1.4 m machine coexist, 4 robots, still 8/8 |
+| `tight-hall` | A 14 × 9 m hall is **refused** (exit 1, `infeasible`) instead of drawing something impossible |
+| `rotated-blocks` | Inserts rotated 90°/180° are detected and reported; footprints come from the catalogue |
+| `units-metres` | A drawing in metres scales to 24 × 13 m correctly |
+| `unrecognised-blocks` | Unnameable blocks fail loudly (exit 2) rather than planning an empty cell |
+
+The line rate is exercised too: 30 JPH → "two robots suffice, three in the drawing", 60 JPH → no warning, 120 JPH →
+"five needed". The inventory always comes from the drawing; JPH only judges whether it is enough.
+
 ## Inside AutoCAD
 
 1. `APPLOAD` → `lisp/WPE.lsp`
