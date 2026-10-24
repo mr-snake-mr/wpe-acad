@@ -1,0 +1,11 @@
+{
+  "name": "wpe-acad",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WPE layout optimiser for AutoCAD: headless engine, CLI and AutoLISP front end.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node tests/cli-test.js",
+    "plan": "node cli/wpe-plan.js"
+  }
+}

@@ -12,7 +12,7 @@ drawing blocks ─► planner + 8-rule checker ─► layout on WPE-* layers
 ## Quick start (no AutoCAD needed)
 
 ```bash
-node cli/wpe-plan.js tests/samples/hall-24x13-with-machines.dxf --jph 60 --out plan.dxf --csv plan.csv
+node cli/wpe-plan.js tests/samples/hall-24x13-with-machines.dxf --jph 60 --out samples/plan.dxf --csv samples/plan.csv
 node tests/cli-test.js            # 14 assertions, ~1 s
 python tests/validate_output.py samples/plan.dxf   # independent CAD parse
 ```
