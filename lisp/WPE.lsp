@@ -28,6 +28,12 @@
 (defun wpe:temp (tag ext)
   (strcat (vl-filename-mktemp (strcat "wpe-" tag)) ext))
 
+;; Prefer the node.exe shipped in the package; fall back to PATH.
+(defun wpe:node (dir)
+  (if (findfile (strcat dir "/node/node.exe"))
+    (strcat "\"" dir "/node/node.exe\"")
+    "node"))
+
 (defun wpe:split (s / out i c token)
   (setq out '() token "" i 1)
   (while (<= i (strlen s))
@@ -124,7 +130,7 @@
     (princ "\nAborted: no blocks found in model space.")
     (progn
       (startapp "cmd.exe"
-        (strcat "/c node \"" planexe "\" --blocks \"" bfile "\" --hall "
+        (strcat "/c " (wpe:node dir) " \"" planexe "\" --blocks \"" bfile "\" --hall "
                 (rtos bw 2 0) "x" (rtos bh 2 0) " --csv \"" pfile "\""))
       (princ "\nPlanning…")
       (if (wpe:wait pfile 30000)
@@ -164,5 +170,45 @@
       (princ path)))
   (princ))
 
-(princ "\nWPE loaded. WPEPLAN plans, WPEBLOCKS audits block names.")
+;; ------------------------------------------------------------------- WPEDEMO
+;; Builds a throwaway drawing in the current space so the tool can be tried
+;; without touching a real project. Demo only — do not save over production work.
+(defun wpe:mkblock (nm w h)
+  (if (not (tblsearch "BLOCK" nm))
+    (progn
+      (entmake (list '(0 . "BLOCK") (cons 2 nm) '(70 . 0)
+                     '(10 0.0 0.0 0.0) (cons 3 nm)))
+      (entmake (list '(0 . "LWPOLYLINE") '(8 . "0") '(90 . 4) '(70 . 1)
+                     (cons 10 (list 0.0 0.0)) (cons 10 (list (float w) 0.0))
+                     (cons 10 (list (float w) (float h))) (cons 10 (list 0.0 (float h)))))
+      (entmake '((0 . "ENDBLK"))))))
+
+(defun c:WPEDEMO (/ )
+  (wpe:layer "WPE-HALL" 7)
+  (wpe:mkblock "WPE-DEMO-ROBOT" 800 800)
+  (wpe:mkblock "WPE-DEMO-MACHINE-1" 3200 2200)
+  (wpe:mkblock "WPE-DEMO-MACHINE-2" 2600 2000)
+  (wpe:mkblock "WPE-DEMO-LOAD-FIXTURE" 1400 1000)
+  (wpe:mkblock "WPE-DEMO-UNLOAD-FIXTURE" 1400 1000)
+  (wpe:mkblock "WPE-DEMO-TROLLEY" 1200 800)
+  (entmake (list '(0 . "LWPOLYLINE") '(8 . "WPE-HALL") '(90 . 4) '(70 . 1)
+                 '(10 0.0 0.0) '(10 24000.0 0.0) '(10 24000.0 13000.0) '(10 0.0 13000.0)))
+  (foreach p '(("WPE-DEMO-LOAD-FIXTURE" 2000.0 6000.0)
+               ("WPE-DEMO-ROBOT" 5000.0 6000.0)
+               ("WPE-DEMO-ROBOT" 6500.0 6000.0)
+               ("WPE-DEMO-ROBOT" 8000.0 6000.0)
+               ("WPE-DEMO-MACHINE-1" 11000.0 6000.0)
+               ("WPE-DEMO-MACHINE-2" 15000.0 6000.0)
+               ("WPE-DEMO-UNLOAD-FIXTURE" 19000.0 6000.0)
+               ("WPE-DEMO-TROLLEY" 3000.0 500.0)
+               ("WPE-DEMO-TROLLEY" 5000.0 500.0)
+               ("WPE-DEMO-TROLLEY" 7000.0 500.0))
+    (entmake (list '(0 . "INSERT") (cons 2 (car p)) '(8 . "EQUIP")
+                   (cons 10 (list (cadr p) (caddr p) 0.0)))))
+  (command "_.zoom" "_E")
+  (princ "\nDemo drawing created: 24 x 13 m hall, 3 robots, 2 machines, 10 blocks.")
+  (princ "\nRun WPEPLAN next.")
+  (princ))
+
+(princ "\nWPE loaded. WPEPLAN plans, WPEBLOCKS audits, WPEDEMO builds a test drawing.")
 (princ)

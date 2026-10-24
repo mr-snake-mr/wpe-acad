@@ -3,3 +3,4 @@
 tests/samples/plan*.csv
 *.log
 tests/samples/*-plan.dxf
+dist/
