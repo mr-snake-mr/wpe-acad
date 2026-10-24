@@ -9,6 +9,19 @@ AutoCAD (or from the command line) and the result is drawn into the DWG.
 drawing blocks ─► planner + 8-rule checker ─► layout on WPE-* layers
 ```
 
+## DWG only — DXF is not part of the product
+
+The runtime path never touches a file format:
+
+```
+open DWG → blocks read from the live database → temp CSV → engine → temp CSV → drawn back into the same DWG
+```
+
+No export, no conversion, no intermediate drawing. The plugin works on the drawing that is open.
+
+DXF appears **only in `tests/`**, as a synthetic stand-in for "a drawing containing blocks", because the build machine
+has no AutoCAD. It is a test fixture, not a dependency: nothing in `lisp/` or the planner reads one.
+
 ## Quick start (no AutoCAD needed)
 
 ```bash
@@ -32,7 +45,9 @@ WPE plan — hall-24x13-with-machines.dxf
 
 1. `APPLOAD` → `lisp/WPE.lsp`
 2. `(setq WPEDIR "C:/path/to/WpeAcad")`
-3. `WPEPLAN`
+3. `WPEBLOCKS` first — read-only audit: writes `wpe-blocks.csv` next to the drawing, listing every block name and
+   count, so the naming convention can be checked before planning anything.
+4. `WPEPLAN` — plans and draws.
 
 The command exports every INSERT, calls the CLI, and draws the returned plan with `entmake` — no compilation, no .NET,
 no admin rights. `docs/VERIFICATION.md` explains what that means for trust.
