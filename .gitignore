@@ -1,8 +1,6 @@
-﻿node_modules/
-/samples/
-tests/samples/plan*.csv
+node_modules/
+tests/samples/_*.csv
 *.log
-tests/samples/*-plan.dxf
 dist/
 dist/
 *.zip

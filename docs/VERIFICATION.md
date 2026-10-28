@@ -4,69 +4,74 @@ There is no AutoCAD on the build machine and none can be installed, so the proje
 the AutoCAD shell runs and is tested outside CAD**. Nothing here claims the shell has been executed — it has not.
 
 ```
-        DXF / block list                 plan + report
-drawing ───────────────►  ENGINE  ─────────────────────►  DXF / CSV
-                            │
-                            ├── verified here, today (levels 0–2)
-                            └── AutoCAD shell: verified only by the client (level 3)
+     INSERTs in the open DWG          drawing list (layer,x,y,w,h,label)
+              │                                   ▲
+              ▼                                   │
+        measured block list ──►  ENGINE  ─────────┘
+        (name,x,y,w,h)            │
+                                  ├── verified here, today (levels 0–2)
+                                  └── AutoCAD shell: verified only by the client (level 3)
 ```
+
+No drawing file is read or written at any point — not on this machine, not on the CAD machine.
 
 ## Level 0 — the engine, already proven
 
-`node tests/cli-test.js` — 14 assertions, runs in about a second:
+`node tests/cli-test.js` — a second, and `node tests/fixture-test.js` — a third. Each prints one line per assertion.
 
 | Assertion | Evidence |
 |---|---|
-| Reads real DXF blocks and classifies them | 3 robots, 1 + 1 machines, 2 fixtures, 3 + 1 trolleys found |
+| Reads a measured block list and classifies it | 3 robots, 1 + 1 machines, 2 fixtures, 3 + 1 trolleys found |
+| Uses the drawing's sizes, per instance | 11 footprints measured; a 10 m and a 1 m machine keep `1200x10000` and `1000x1000` |
 | Plans from a line rate | 60 JPH → 3 robots, derived, not entered |
 | All eight rules pass | `8/8`, each rule row prints its measured minimum |
 | Search is real | 34 arrangements evaluated |
-| Writes a usable drawing | 19 shapes across `WPE-PLAN`, `WPE-FENCE`, `WPE-WALK` |
-| Fails honestly | a 9 × 7 m hall exits 1 instead of drawing an impossible layout |
+| Writes a usable drawing list | 19 shapes across `WPE-PLAN`, `WPE-FENCE`, `WPE-WALK` |
+| Fails honestly | a 14 × 9 m hall exits 1 instead of drawing an impossible layout |
+| Refuses nonsense input | a measurement larger than the hall is reported, and the catalogue is used |
 
-## Level 1 — the drawing it writes is valid CAD
+## Level 1 — the drawing list is sound geometry
 
-`python tests/validate_output.py samples/plan.dxf` — parses the output with **ezdxf**, an independent CAD library:
+`tests/csv-check.js` re-reads the output the AutoCAD side consumes and re-measures it independently of the planner:
 
-```
-DXF is R12 (AC1009)        PASS
-units are millimetres       PASS
-plan layers present         PASS   WPE-HALL WPE-WALK WPE-FENCE WPE-PLAN WPE-FLOW WPE-TEXT
-geometry written            PASS   81 lines, 18 texts
-width ~24 m / depth ~13 m   PASS   24000 x 14160 mm
-audit clean                 PASS   0 errors, 0 fixes
-```
+- every shape lies inside the hall outline;
+- no two equipment footprints overlap;
+- every layer name is one of `WPE-HALL`, `WPE-WALK`, `WPE-FENCE`, `WPE-PLAN`;
+- no zero-size shape, exactly one hall outline, fences and both walkway rings present.
 
-This is the closest thing to "does CAD accept it" without CAD: a separate implementation reads the file, finds the
-layers, resolves the extents and audits every entity.
+This is the closest thing to "does CAD accept it" without CAD: it checks the same numbers the LISP will hand to
+`entmake`, from the outside.
 
 ## Level 2 — the shell is small and reviewable
 
-`lisp/WPE.lsp` is 140 lines and does only four things: export blocks, call the CLI, wait, draw the returned CSV with
-`entmake`. It contains no planning logic — if the plan is right or wrong, that is decided by code already tested at
-levels 0–1. Review it in twenty minutes; there is nothing hidden in it.
+`python tests/lisp-check.py` — balanced parentheses outside strings and comments, 23 defuns, 14 `wpe:` calls, no call to
+an undefined function.
+
+`lisp/WPE.lsp` does five things: measure the hall, measure and export the blocks, call the CLI, wait for the answer,
+draw it with `entmake`. It contains no planning logic — if the plan is right or wrong, that is decided by code already
+tested at levels 0–1.
 
 ## Level 3 — the only part the client must run (10 minutes)
 
-1. Copy the folder, run `npm test` once (or just `node tests/cli-test.js`) — a failure here means an install problem,
+1. Unzip, then run `node tests\cli-test.js` with the bundled `node\node.exe` — a failure here means an install problem,
    not a layout problem.
 2. AutoCAD: `APPLOAD` → `lisp/WPE.lsp`.
-3. At the command line: `(setq WPEDIR "C:/path/to/WpeAcad")`.
-4. Open a drawing containing named blocks and a closed polyline on `WPE-HALL`. Type `WPEPLAN`.
-5. Expect: a message that N blocks were exported, then "Drew N shapes on the WPE-* layers".
-6. If nothing comes back, the command prints the exact CLI line to run by hand — that line reproduces the whole
-   calculation outside CAD.
+3. At the command line: `(setq WPEDIR "C:/WPE")`.
+4. `WPEDEMO`, then `WPEPLAN` — a throwaway 24 × 13 m drawing, no risk to real work.
+5. Open a real drawing with named blocks and a closed polyline on `WPE-HALL`, then type `WPEPLAN`.
+6. Expect: "Exported N block(s) with measured extents", then "Drew N shape(s) on the WPE-* layers".
 
-Send back three things and the plugin is verified or falsified: the text in the command window, the saved DWG, and the
-`plan.csv` from the temp folder.
+If nothing comes back, the command prints the engine's own log, and `WPEDIAG` writes `wpe-diag.txt`. Send back the
+command-window text, the saved DWG and that log: that is enough to either confirm the plugin or fix it.
 
 ## What still cannot be verified from here
 
-- That `APPLOAD`/`netload` accepts the file in their AutoCAD release.
-- Palette/UI behaviour (there is no palette in this version — command line only).
-- `startapp` timing on their machine (30 s timeout is generous; a cold Node start is ~1 s).
+- That `APPLOAD` accepts the file in their AutoCAD release.
+- `startapp` timing on their machine (30 s timeout is generous; a cold Node start is about a second).
 - Entity handling quirks: text height limits, layer state locks, annotative scale.
-- Whether their blocks are proxy objects or live inside xrefs.
+- Whether their blocks are proxy objects or live inside xrefs — a proxy with no extents falls back to the catalogue
+  and says so in the log.
+- Rotated inserts: the bounding box is axis-aligned, so a rotated block measures slightly large. Never small.
 
 Those are exactly the failures the 10-minute script exposes, which is why it exists.
 

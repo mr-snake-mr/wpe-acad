@@ -24,11 +24,16 @@ STEP 4  Test on a throwaway drawing first:
 
         A good run prints something like:
             Drawing units scale: x1.000 mm per unit
-            Exported 10 block(s).
+            Exported 10 block(s) with measured extents.
             Planning…
             Drew … shape(s) on the WPE-* layers.
+            sizes       : 10 measured from the drawing
             status      : ok   rules 8/8
             flow        : 14.36 m, 1 row(s), 50 m2 footprint
+
+        Machine sizes come from the drawing itself: each block is measured,
+        so a 10 m machine stays 10 m in the plan. If a block cannot be
+        measured, the built-in size is used and the log says so.
 
         Then run  WPEPLAN  on the real drawing when you are ready.
         WPEPLAN is additive: it never moves or deletes your blocks, and one

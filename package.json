@@ -1,12 +1,11 @@
 {
   "name": "wpe-acad",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "WPE layout optimiser for AutoCAD: headless engine, CLI and AutoLISP front end.",
+  "description": "WPE layout optimiser for AutoCAD: headless engine, CLI and AutoLISP front end. DWG only.",
   "license": "MIT",
   "scripts": {
     "test": "node tests/cli-test.js && node tests/fixture-test.js",
-    "fixtures": "python tests/make_fixture.py",
     "plan": "node cli/wpe-plan.js"
   }
 }

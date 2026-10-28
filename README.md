@@ -6,25 +6,53 @@ This is a **separate project** from the web application — the web app is untou
 AutoCAD (or from the command line) and the result is drawn into the DWG.
 
 ```
-drawing blocks ─► planner + 8-rule checker ─► layout on WPE-* layers
+blocks in the open DWG ─► planner + 8-rule checker ─► shapes on WPE-* layers in the same DWG
 ```
 
-## DWG only — DXF is not part of the product
+## DWG only — no interchange format
+
+Nothing here reads, writes or converts a drawing file. There is no importer, no exporter, no converter and no fixture
+in any other format: the plugin works on the drawing that is open, and nothing else.
 
 The runtime path never touches a file format:
 
 ```
-open DWG → blocks read from the live database → temp CSV → engine → temp CSV → drawn back into the same DWG
+open DWG → INSERTs read from the live drawing (name + measured extents)
+         → temp CSV → engine → temp CSV → entmake back into the same DWG
 ```
 
-No export, no conversion, no intermediate drawing. The plugin works on the drawing that is open.
+Nothing is exported or converted. The plugin works on the drawing that is open, and one `UNDO` removes everything it
+drew.
 
-DXF appears **only in `tests/`**, as a synthetic stand-in for "a drawing containing blocks", because the build machine
-has no AutoCAD. It is a test fixture, not a dependency: nothing in `lisp/` or the planner reads one.
+## The plan uses your real machine sizes
+
+`WPEPLAN` measures the extents of every INSERT (`vla-getboundingbox`) and passes them to the engine. The catalogue in
+`engine/config.js` is only a fallback for blocks whose extents cannot be read.
+
+Sizes are kept **per instance**, not per type. A 10 m machine and a 1 m machine of the same type keep their own
+footprints in the plan; they are not averaged and not replaced by a default:
+
+```
+$ node cli/wpe-plan.js --blocks tests/samples/mixed-machine-sizes.csv --hall 30000x15000
+  sizes       : 9 measured from the drawing
+                machine1: 10.00 x 1.20 m
+                machine2: 1.00 x 1.00 m
+```
+
+A block with no geometry, or a measurement larger than the hall itself, is reported and falls back to the catalogue
+instead of being trusted:
+
+```
+  size note   : ROBOT-01: measured 999999 x 999999 mm is outside the hall — catalogue size used
+```
+
+Two limits, stated plainly: the measurement is the axis-aligned bounding box, so a rotated block reads slightly large
+(never small); and robots sharing one fenced cell are placed around the largest measured robot, because the cell has a
+single size.
 
 ## Handover package
 
-`build-package.ps1` produces `dist/wpe-acad-<version>.zip` - the artefact to put on the CAD machine. It contains the
+`build-package.ps1` produces `dist/wpe-acad-<version>.zip` — the artefact to put on the CAD machine. It contains the
 LISP, the engine, the tests, a bundled `node.exe` and `START-HERE.txt`, so nothing needs installing.
 
 On that machine:
@@ -34,40 +62,43 @@ On that machine:
 3. `WPEDIAG`, then `WPEBLOCKS`, then `WPEPLAN`
 4. If anything fails, `collect.ps1 -DrawingFolder <path>` gathers the diagnostics into one zip to send back
 
-Runbook: [docs/RUN-ON-CAD.md](docs/RUN-ON-CAD.md) - Names: [docs/CONVENTIONS.md](docs/CONVENTIONS.md)
+Runbook: [docs/RUN-ON-CAD.md](docs/RUN-ON-CAD.md) — Names: [docs/CONVENTIONS.md](docs/CONVENTIONS.md)
 
 ## Quick start (no AutoCAD needed)
 
+The engine is the same code the CAD side calls, so it runs from a terminal against a block list shaped exactly like
+the one `WPEPLAN` writes — `name,x,y,w,h` in millimetres:
+
 ```bash
-node cli/wpe-plan.js tests/samples/hall-24x13-with-machines.dxf --jph 60 --out samples/plan.dxf --csv samples/plan.csv
-node tests/cli-test.js            # 14 assertions, ~1 s
-python tests/validate_output.py samples/plan.dxf   # independent CAD parse
+node cli/wpe-plan.js --blocks tests/samples/baseline-24x13.csv --hall 24000x13000 --csv plan.csv
+node tests/cli-test.js            # golden test + CSV contract
+node tests/fixture-test.js        # six scenarios, behaviour asserted
 ```
 
 Output:
 
 ```
-WPE plan — hall-24x13-with-machines.dxf
+WPE plan
   hall        : 24.0 x 13.0 m
-  found       : {"robots":3,"machine1":1,"machine2":1,"loadFixture":1,"unloadFixture":1,"trolley1":3,"trolley2":1}
+  recognised  : 3 robots, 1 machine1, 1 machine2, 2 fixtures, 4 trolleys
+  sizes       : 11 measured from the drawing
   status      : ok   rules 8/8
   flow        : 14.36 m, 1 row(s), 50 m2 footprint
-  candidates  : 34 in 142 ms
+  candidates  : 34 in 66 ms
 ```
 
-## Fixture suite — five drawings the plugin will meet
+Exit codes: `0` compliant, `1` does not fit or a rule fails, `2` bad input.
 
-`npm test` runs both suites. Each fixture is a stand-in for a real drawing, and the assertion is about behaviour, not
-just "it ran":
+## Fixture suite — what the plugin will meet
 
 | Fixture | What it proves |
 |---|---|
-| `hall-24x13-with-machines` | The baseline: 3 robots, both machines, plans and passes 8/8 |
-| `varied-machine-sizes` | A 4.2 × 2.6 m and a 1.8 × 1.4 m machine coexist, 4 robots, still 8/8 |
+| `baseline-24x13` | The baseline: 3 robots, both machines, plans and passes 8/8 |
+| `mixed-machine-sizes` | A 10 m and a 1 m machine keep their own footprints |
 | `tight-hall` | A 14 × 9 m hall is **refused** (exit 1, `infeasible`) instead of drawing something impossible |
-| `rotated-blocks` | Inserts rotated 90°/180° are detected and reported; footprints come from the catalogue |
-| `units-metres` | A drawing in metres scales to 24 × 13 m correctly |
+| `no-extents` | A block list without extents falls back to the catalogue and says so |
 | `unrecognised-blocks` | Unnameable blocks fail loudly (exit 2) rather than planning an empty cell |
+| `blocks` (names only) | The old two-column format still plans |
 
 The line rate is exercised too: 30 JPH → "two robots suffice, three in the drawing", 60 JPH → no warning, 120 JPH →
 "five needed". The inventory always comes from the drawing; JPH only judges whether it is enough.
@@ -80,7 +111,7 @@ The line rate is exercised too: 30 JPH → "two robots suffice, three in the dra
    count, so the naming convention can be checked before planning anything.
 4. `WPEPLAN` — plans and draws.
 
-The command exports every INSERT, calls the CLI, and draws the returned plan with `entmake` — no compilation, no .NET,
+The command measures every INSERT, calls the CLI, and draws the returned plan with `entmake` — no compilation, no .NET,
 no admin rights. `docs/VERIFICATION.md` explains what that means for trust.
 
 ## Naming
@@ -95,17 +126,17 @@ Output layers: `WPE-HALL`, `WPE-PLAN`, `WPE-FENCE`, `WPE-WALK`, `WPE-FLOW`, `WPE
 
 | Part | Status |
 |---|---|
-| Engine (planning + 8 rules) | Tested here — `tests/cli-test.js`, 14 assertions |
-| DXF read/write | Tested here — real DXF in, output audited by ezdxf |
-| LISP front end | **Not executed** — reviewed only; needs one AutoCAD run (10 min, see verification doc) |
+| Engine (planning + 8 rules) | Tested here — `tests/cli-test.js`, `tests/fixture-test.js` |
+| Plan output | Tested here — the CSV is re-checked as geometry: inside the hall, no overlaps, legal layers |
+| LISP front end | **Not executed** — reviewed and statically checked; needs one AutoCAD run (10 min, see verification doc) |
 
 ## Layout
 
 ```
-engine/    planner, checker, geometry, DXF read/write (copied from the web app, unmodified logic)
-lib/       mapper: block name → resource role
-cli/       headless planner (DXF or block list in, DXF/CSV out)
-lisp/      WPE.lsp — AutoCAD command
-tests/     fixture generator, golden test, DXF validator
-docs/      VERIFICATION.md
+engine/    planner, checker, geometry, config (copied from the web app, unmodified logic)
+lib/       mapper (block name → role), plan-csv (the drawing list the LISP consumes)
+cli/       headless planner: block list in, drawing list out
+lisp/      WPE.lsp — AutoCAD commands
+tests/     golden test, fixture suite, plan-CSV checker, LISP static check
+docs/      VERIFICATION.md, RUN-ON-CAD.md, CONVENTIONS.md
 ```

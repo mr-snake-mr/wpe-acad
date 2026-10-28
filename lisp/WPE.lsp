@@ -87,24 +87,42 @@
       (setq i (1+ i))))
   tbl)
 
-;; coordinates are converted to millimetres here; the planner works in mm only
-(defun wpe:write-blocks (file / ss i e ed nm pt sc f)
+;; measured extents of one block reference, in millimetres (nil if it has none)
+(defun wpe:extents (e / obj mn mx lo hi)
+  (setq obj (vlax-ename->vla-object e))
+  (if (vl-catch-all-error-p (vl-catch-all-apply 'vla-getboundingbox (list obj 'mn 'mx)))
+    nil
+    (progn
+      (setq lo (vlax-safearray->list mn)
+            hi (vlax-safearray->list mx))
+      (list (* (abs (- (car hi) (car lo))) *wpe-mm*)
+            (* (abs (- (cadr hi) (cadr lo))) *wpe-mm*)))))
+
+;; coordinates and extents are converted to millimetres here; the planner is mm only
+(defun wpe:write-blocks (file / ss i e ed nm pt sc f bx w h)
   (setq sc *wpe-mm*)
   (setq ss (ssget "_X" '((0 . "INSERT"))))
   (if (not ss) nil
     (progn
       (setq f (open file "w"))
-      (write-line "name,x,y" f)
+      (write-line "name,x,y,w,h" f)
       (setq i 0)
       (while (< i (sslength ss))
         (setq e  (ssname ss i)
               ed (entget e)
               nm (cdr (assoc 2 ed))
-              pt (trans (cdr (assoc 10 ed)) e 1))
-        (write-line (strcat nm "," (rtos (* (car pt) sc) 2 1) "," (rtos (* (cadr pt) sc) 2 1)) f)
+              pt (trans (cdr (assoc 10 ed)) e 1)
+              bx (wpe:extents e)
+              w  (if bx (car bx) 0.0)
+              h  (if bx (cadr bx) 0.0))
+        (write-line (strcat nm ","
+                            (rtos (* (car pt) sc) 2 1) ","
+                            (rtos (* (cadr pt) sc) 2 1) ","
+                            (rtos w 2 1) ","
+                            (rtos h 2 1)) f)
         (setq i (1+ i)))
       (close f)
-      (princ (strcat "\nExported " (itoa (sslength ss)) " block(s)."))
+      (princ (strcat "\nExported " (itoa (sslength ss)) " block(s) with measured extents."))
       T)))
 
 ;; ------------------------------------------------------------------ hall
@@ -225,7 +243,11 @@
   (princ))
 
 ;; ------------------------------------------------------------------ WPEDEMO
-(defun wpe:mkblock (nm w h)
+;; geometry is defined in millimetres and scaled to the drawing's units
+(defun wpe:mkblock (nm w h / sc)
+  (setq sc (if (and (boundp '*wpe-mm*) *wpe-mm*) *wpe-mm* 1.0)
+        w  (/ w sc)
+        h  (/ h sc))
   (if (not (tblsearch "BLOCK" nm))
     (progn
       (entmake (list '(0 . "BLOCK") (cons 2 nm) (cons 3 nm) '(70 . 0) '(10 0.0 0.0 0.0)))

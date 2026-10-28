@@ -13,9 +13,44 @@
   const cfg = () => WPE.Config;
   const g = () => WPE.Geom;
 
-  /* ---------- module builders (local coordinates) ---------- */
-  function fixtureUnit(id, type, label) {
+  /* Footprints come from the drawing when the front end measured them, one
+     entry per instance — a 10 m machine and a 1 m machine of the same type
+     keep their own sizes. The catalogue is only the fallback. */
+  function dims(type) {
+    return cfg().DIMS[type];
+  }
+
+  /** one instance size, or the catalogue default when the drawing is silent */
+  function sizeOf(type, given) {
+    if (given && isFinite(given.w) && isFinite(given.h) && given.w >= 50 && given.h >= 50) {
+      return { w: given.w, h: given.h };
+    }
     const d = cfg().DIMS[type];
+    return { w: d.w, h: d.h };
+  }
+
+  /** the n-th measured size for a role (null when there is none) */
+  function nthSize(sizes, key, i) {
+    const list = sizes && sizes[key];
+    if (!list) return null;
+    if (Array.isArray(list)) return list[i] || null;
+    return i === 0 ? list : null;
+  }
+
+  /** largest measured size in a role — a shared cell or a wall run must fit all */
+  function maxSize(sizes, key, type) {
+    const list = sizes && sizes[key];
+    const arr = Array.isArray(list) ? list : (list ? [list] : []);
+    if (!arr.length) return sizeOf(type, null);
+    return arr.reduce((a, s) => {
+      const d = sizeOf(type, s);
+      return { w: Math.max(a.w, d.w), h: Math.max(a.h, d.h) };
+    }, { w: 0, h: 0 });
+  }
+
+  /* ---------- module builders (local coordinates) ---------- */
+  function fixtureUnit(id, type, label, size) {
+    const d = sizeOf(type, size);
     return {
       id: id, label: label, kind: 'fixture',
       w: d.w, h: d.h,
@@ -25,8 +60,8 @@
     };
   }
 
-  function machineUnit(id, type, label) {
-    const d = cfg().DIMS[type];
+  function machineUnit(id, type, label, size) {
+    const d = sizeOf(type, size);
     return {
       id: id, label: label, kind: 'machine',
       w: d.w, h: d.h,
@@ -37,12 +72,13 @@
   }
 
   /** a fenced robot cell: robots inside, controllers outside the fence */
-  function cellUnit(id, n, rules, cellName) {
-    const D = cfg().DIMS;
-    const rw = D.robot.w, rh = D.robot.h;
+  function cellUnit(id, n, rules, cellName, robotSize, ctrlSize) {
+    const robotD = sizeOf('robot', robotSize);
+    const ctrlD = sizeOf('controller', ctrlSize);
+    const rw = robotD.w, rh = robotD.h;
     const pad = rules.fencePadding;
     const rGap = rules.robotRobot;
-    const cw = D.controller.w, ch = D.controller.h, cGap = 100;
+    const cw = ctrlD.w, ch = ctrlD.h, cGap = 100;
 
     const robotsW = n * rw + (n - 1) * rGap;
     const ctrlsW = n * cw + (n - 1) * cGap;
@@ -96,29 +132,36 @@
     };
   }
 
-  function buildUnits(counts, rules, prefix) {
+  function buildUnits(counts, rules, prefix, sizes) {
     const c = counts || {};
     const p = prefix || '';
     const units = [];
-    units.push(fixtureUnit(p + 'u-load', 'loading_fixture', 'Loading fixture'));
+    /* robots share one fenced cell, so the cell is built around the largest */
+    const robotMax = maxSize(sizes, 'robots', 'robot');
+    const ctrlMax = maxSize(sizes, 'controllers', 'controller');
+    units.push(fixtureUnit(p + 'u-load', 'loading_fixture', 'Loading fixture',
+      sizes && sizes.loading_fixture));
     const n = Math.max(0, c.robots | 0);
     let cellA = 0, cellB = 0;
     if (n > 0) {
       const cells = n >= 2 ? 2 : 1;
       cellA = Math.ceil(n / cells);
       cellB = n - cellA;
-      units.push(cellUnit(p + 'cell-a', cellA, rules, 'Safety zone A'));
+      units.push(cellUnit(p + 'cell-a', cellA, rules, 'Safety zone A', robotMax, ctrlMax));
     }
     const m1 = Math.max(0, c.machine1 | 0);
     for (let i = 0; i < m1; i++) {
-      units.push(machineUnit(p + 'm1-' + (i + 1), 'machine1', m1 > 1 ? 'Machine 1.' + (i + 1) : 'Machine 1'));
+      units.push(machineUnit(p + 'm1-' + (i + 1), 'machine1', m1 > 1 ? 'Machine 1.' + (i + 1) : 'Machine 1',
+        nthSize(sizes, 'machine1', i)));
     }
     const m2 = Math.max(0, c.machine2 | 0);
     for (let i = 0; i < m2; i++) {
-      units.push(machineUnit(p + 'm2-' + (i + 1), 'machine2', m2 > 1 ? 'Machine 2.' + (i + 1) : 'Machine 2'));
+      units.push(machineUnit(p + 'm2-' + (i + 1), 'machine2', m2 > 1 ? 'Machine 2.' + (i + 1) : 'Machine 2',
+        nthSize(sizes, 'machine2', i)));
     }
-    if (cellB > 0) units.push(cellUnit(p + 'cell-b', cellB, rules, 'Safety zone B'));
-    units.push(fixtureUnit(p + 'u-unload', 'unload_fixture', 'Unload fixture'));
+    if (cellB > 0) units.push(cellUnit(p + 'cell-b', cellB, rules, 'Safety zone B', robotMax, ctrlMax));
+    units.push(fixtureUnit(p + 'u-unload', 'unload_fixture', 'Unload fixture',
+      sizes && sizes.unload_fixture));
     return units;
   }
 
@@ -204,8 +247,12 @@
   }
 
   /* ---------- perimeter trolleys ---------- */
-  function placeTrolleys(hall, rules, counts, band) {
-    const D = cfg().DIMS;
+  function placeTrolleys(hall, rules, counts, band, sizes) {
+    /* a trolley is placed by its longest side, so the largest one sizes the run */
+    const D = {
+      trolley1: maxSize(sizes, 'trolley1', 'trolley1'),
+      trolley2: maxSize(sizes, 'trolley2', 'trolley2')
+    };
     const gapMin = rules.trolleyGap;
     const inset = 100;
     // corner margin keeps each trolley's operator approach clear of the neighbouring wall
@@ -277,7 +324,7 @@
         items.push({
           id: 'trolley-' + (items.length + 1),
           kind: 'trolley', type: t.type,
-          label: D[t.type].label + ' ' + (items.length + 1),
+           label: cfg().DIMS[t.type].label + ' ' + (items.length + 1),
           wall: wk, access: access, rect: rect
         });
         if (n > 1) pos += pitch;
@@ -348,15 +395,15 @@
     if (dual) {
       const halfW = (prod.w - betweenStations) / 2;
       groups = [
-        { id: 'A', rect: { x: prod.x, y: prod.y, w: halfW, h: prod.h }, units: buildUnits(state.counts, rules, 'a-') },
-        { id: 'B', rect: { x: prod.x + halfW + betweenStations, y: prod.y, w: halfW, h: prod.h }, units: buildUnits(state.countsB || {}, rules, 'b-') }
+        { id: 'A', rect: { x: prod.x, y: prod.y, w: halfW, h: prod.h }, units: buildUnits(state.counts, rules, 'a-', state.sizes) },
+        { id: 'B', rect: { x: prod.x + halfW + betweenStations, y: prod.y, w: halfW, h: prod.h }, units: buildUnits(state.countsB || {}, rules, 'b-', state.sizesB || null) }
       ];
       zones.stations = { gap: betweenStations, a: groups[0].rect, b: groups[1].rect };
       if (halfW < 6000) {
         notes.push('Each station only gets ' + geo.fmtMm(halfW) + ' of width — a two-station layout needs a wider hall.');
       }
     } else {
-      groups = [{ id: 'A', rect: prod, units: buildUnits(state.counts, rules, '') }];
+      groups = [{ id: 'A', rect: prod, units: buildUnits(state.counts, rules, '', state.sizes) }];
     }
 
     const unitGapBase = Math.max(rules.machineGap, rules.fenceClearance);
@@ -396,7 +443,7 @@
               it.station = cx < groups[0].rect.x + groups[0].rect.w ? 'A' : 'B';
             });
           }
-          const trol = placeTrolleys(hall, rules, state.counts || {}, band);
+          const trol = placeTrolleys(hall, rules, state.counts || {}, band, state.sizes);
           const layout = {
             hall: hall, zones: zones, rules: rules,
             items: packed.items.concat(trol.items),
@@ -506,6 +553,7 @@
       layout: best.layout,
       check: best.check,
       objective: objective,
+      sizes: state.sizes || null,
       alternatives: unique.map((c) => ({
         label: c.label, fails: c.fails, flow: c.flow, fits: c.fits,
         rows: c.layout.metrics.rows, rowGap: c.layout.metrics.rowGap,

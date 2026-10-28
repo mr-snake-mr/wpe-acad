@@ -16,8 +16,9 @@ $files = @(
   "START-HERE.txt", "README.md", "VERSION.txt", "collect.ps1", "package.json",
   "lisp\WPE.lsp",
   "cli\wpe-plan.js",
-  "lib\mapper.js", "lib\aliases.json",
-  "docs\CONVENTIONS.md", "docs\RUN-ON-CAD.md", "docs\VERIFICATION.md"
+  "lib\mapper.js", "lib\aliases.json", "lib\plan-csv.js",
+  "docs\CONVENTIONS.md", "docs\RUN-ON-CAD.md", "docs\VERIFICATION.md",
+  "docs\RELEASE-NOTES-0.3.0.md"
 )
 foreach ($f in $files) {
   $src = Join-Path $root $f
@@ -30,8 +31,9 @@ foreach ($f in $files) {
 # engine + tests travel with it so the target machine can prove itself
 Copy-Item (Join-Path $root "engine") (Join-Path $stage "engine") -Recurse
 Copy-Item (Join-Path $root "tests") (Join-Path $stage "tests") -Recurse
+# generated plan files are not fixtures
 Get-ChildItem (Join-Path $stage "tests\samples") -File |
-  Where-Object { $_.Name -like "*-plan.dxf" -or $_.Name -eq "plan.csv" } |
+  Where-Object { $_.Name -like "_*" -or $_.Name -eq "plan.csv" } |
   Remove-Item -Force
 
 # bundled runtime
