@@ -22,6 +22,20 @@ No export, no conversion, no intermediate drawing. The plugin works on the drawi
 DXF appears **only in `tests/`**, as a synthetic stand-in for "a drawing containing blocks", because the build machine
 has no AutoCAD. It is a test fixture, not a dependency: nothing in `lisp/` or the planner reads one.
 
+## Handover package
+
+`build-package.ps1` produces `dist/wpe-acad-<version>.zip` - the artefact to put on the CAD machine. It contains the
+LISP, the engine, the tests, a bundled `node.exe` and `START-HERE.txt`, so nothing needs installing.
+
+On that machine:
+
+1. `APPLOAD` to `lisp/WPE.lsp`
+2. `(setq WPEDIR "C:/WPE")`
+3. `WPEDIAG`, then `WPEBLOCKS`, then `WPEPLAN`
+4. If anything fails, `collect.ps1 -DrawingFolder <path>` gathers the diagnostics into one zip to send back
+
+Runbook: [docs/RUN-ON-CAD.md](docs/RUN-ON-CAD.md) - Names: [docs/CONVENTIONS.md](docs/CONVENTIONS.md)
+
 ## Quick start (no AutoCAD needed)
 
 ```bash

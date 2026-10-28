@@ -1,0 +1,9 @@
+{
+  "_comment": "Exact block-name overrides, checked before the pattern rules. Add the names your drawings actually use. Left side = block name as it appears in AutoCAD (case-insensitive), right side = robot | machine1 | machine2 | fixture_load | fixture_unload | trolley1 | trolley2 | controller.",
+  "WPE-DEMO-ROBOT": "robot",
+  "WPE-DEMO-MACHINE-1": "machine1",
+  "WPE-DEMO-MACHINE-2": "machine2",
+  "WPE-DEMO-LOAD-FIXTURE": "fixture_load",
+  "WPE-DEMO-UNLOAD-FIXTURE": "fixture_unload",
+  "WPE-DEMO-TROLLEY": "trolley1"
+}

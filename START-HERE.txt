@@ -1,0 +1,55 @@
+WPE FOR AUTOCAD — START HERE
+============================
+
+You need: AutoCAD (full version, not LT) on Windows. Nothing else.
+Node is bundled in this folder — do not install anything.
+
+STEP 1  Unzip this folder somewhere permanent, e.g.  C:\WPE
+        (do not run it from Downloads or a zip preview)
+
+STEP 2  In AutoCAD, command:  APPLOAD
+        Pick  C:\WPE\lisp\WPE.lsp  ->  Load  ->  Close
+        If AutoCAD warns about an untrusted location, add C:\WPE to the
+        trusted paths (Options > Files > Trusted Locations) and APPLOAD again.
+
+STEP 3  In the AutoCAD command line:
+            (setq WPEDIR "C:/WPE")
+        Forward slashes. This lasts for the session; add it to acaddoc.lsp
+        later if you want it permanent.
+
+STEP 4  Test on a throwaway drawing first:
+            WPEDEMO        builds a 24 x 13 m drawing with 3 robots,
+                           2 machines, 2 fixtures, 3 trolleys
+            WPEPLAN        plans it and draws the result
+
+        A good run prints something like:
+            Drawing units scale: x1.000 mm per unit
+            Exported 10 block(s).
+            Planning…
+            Drew … shape(s) on the WPE-* layers.
+            status      : ok   rules 8/8
+            flow        : 14.36 m, 1 row(s), 50 m2 footprint
+
+        Then run  WPEPLAN  on the real drawing when you are ready.
+        WPEPLAN is additive: it never moves or deletes your blocks, and one
+        UNDO removes everything it drew.
+
+IF SOMETHING GOES WRONG
+-----------------------
+1. Run   WPEDIAG          -> writes wpe-diag.txt next to the drawing
+2. Run   WPEBLOCKS        -> writes wpe-blocks.csv next to the drawing
+3. Press F2 in AutoCAD and copy the command-window text
+4. Send those three things back. That is enough to continue from here.
+
+WPEPLAN also prints the engine's own log if it fails, so the reason is
+usually on screen already.
+
+COMMANDS
+--------
+WPEPLAN    plan the open drawing, draw the result
+WPEBLOCKS  list every block name and count (read-only)
+WPEDIAG    environment, units, inventory, node version (read-only)
+WPEDEMO    build the test drawing
+WPEHELP    list the commands
+
+Details: docs\RUN-ON-CAD.md   Naming: docs\CONVENTIONS.md
